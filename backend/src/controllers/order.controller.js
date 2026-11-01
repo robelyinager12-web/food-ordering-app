@@ -119,3 +119,30 @@ exports.updateStatus = async (req, res, next) => {
     next(err);
   }
 };
+
+// Orders for the dashboard: includes customer info and the items in each order
+exports.incomingOrders = async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT o.id, o.status, o.total, o.delivery_address, o.payment_method, o.created_at,
+              u.name AS customer_name, u.phone AS customer_phone,
+              r.name AS restaurant_name,
+              COALESCE(
+                json_agg(json_build_object('name', m.name, 'quantity', oi.quantity, 'unit_price', oi.unit_price))
+                FILTER (WHERE oi.id IS NOT NULL), '[]'
+              ) AS items
+       FROM orders o
+       JOIN restaurants r ON r.id = o.restaurant_id
+       JOIN users u ON u.id = o.user_id
+       LEFT JOIN order_items oi ON oi.order_id = o.id
+       LEFT JOIN menu_items m ON m.id = oi.menu_item_id
+       WHERE ($1::text = 'admin' OR r.owner_id = $2)
+       GROUP BY o.id, u.name, u.phone, r.name
+       ORDER BY o.created_at DESC`,
+      [req.user.role, req.user.id]
+    );
+    res.json(rows);
+  } catch (err) {
+    next(err);
+  }
+};

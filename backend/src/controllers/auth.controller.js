@@ -8,7 +8,7 @@ const signToken = (user) =>
 
 exports.register = async (req, res, next) => {
   try {
-    const { name, email, phone, password } = req.body;
+    const { name, email, phone, password, accountType } = req.body;
     if (!name || !email || !password || password.length < 6) {
       return res.status(400).json({ message: 'Name, email and a password of 6+ characters are required' });
     }
@@ -16,12 +16,15 @@ exports.register = async (req, res, next) => {
     const exists = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
     if (exists.rows.length) return res.status(409).json({ message: 'Email already registered' });
 
+    // people can sign up as customer or restaurant owner (never admin/driver)
+    const role = accountType === 'restaurant' ? 'restaurant' : 'customer';
+
     const hash = await bcrypt.hash(password, 10);
     const { rows } = await pool.query(
-      `INSERT INTO users (name, email, phone, password_hash)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO users (name, email, phone, password_hash, role)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING id, name, email, phone, role`,
-      [name, email, phone || null, hash]
+      [name, email, phone || null, hash, role]
     );
 
     res.status(201).json({ user: rows[0], token: signToken(rows[0]) });

@@ -7,7 +7,7 @@ router.use(auth);
 
 router.post('/', role('customer'), ctrl.create);
 router.get('/mine', ctrl.myOrders);
-router.get('/restaurant', role('restaurant', 'admin'), ctrl.restaurantOrders);
+router.get('/restaurant', role('restaurant', 'admin'), ctrl.incomingOrders);
 router.get('/:id', ctrl.getOne);
 router.patch('/:id/status', role('restaurant', 'admin'), ctrl.updateStatus);
 
