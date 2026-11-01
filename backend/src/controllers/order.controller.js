@@ -31,7 +31,7 @@ exports.create = async (req, res, next) => {
     const order = await client.query(
       `INSERT INTO orders (user_id, restaurant_id, total, delivery_address, payment_method)
        VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-      [req.user.id, restaurantId, total.toFixed(2), deliveryAddress, paymentMethod || 'cash']
+      [req.user.id, restaurantId, total.toFixed(2), deliveryAddress, paymentMethod === 'online' ? 'online' : 'cash']
     );
     for (const item of items) {
       await client.query(
@@ -124,7 +124,7 @@ exports.updateStatus = async (req, res, next) => {
 exports.incomingOrders = async (req, res, next) => {
   try {
     const { rows } = await pool.query(
-      `SELECT o.id, o.status, o.total, o.delivery_address, o.payment_method, o.created_at,
+      `SELECT o.id, o.status, o.total, o.delivery_address, o.payment_method, o.payment_status, o.created_at,
               u.name AS customer_name, u.phone AS customer_phone,
               r.name AS restaurant_name,
               COALESCE(
@@ -137,7 +137,7 @@ exports.incomingOrders = async (req, res, next) => {
        LEFT JOIN order_items oi ON oi.order_id = o.id
        LEFT JOIN menu_items m ON m.id = oi.menu_item_id
        WHERE ($1::text = 'admin' OR r.owner_id = $2)
-       GROUP BY o.id, u.name, u.phone, r.name
+       AND (o.payment_method = 'cash' OR o.payment_status = 'paid') GROUP BY o.id, u.name, u.phone, r.name
        ORDER BY o.created_at DESC`,
       [req.user.role, req.user.id]
     );

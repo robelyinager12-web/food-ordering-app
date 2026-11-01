@@ -90,7 +90,7 @@ export default function Orders() {
             </ul>
 
             <div className="row total">
-              <span>Total ({o.payment_method})</span>
+              <span>Total ({o.payment_method === 'online' ? 'paid online' : 'cash on delivery'})</span>
               <strong>{money(o.total)}</strong>
             </div>
 

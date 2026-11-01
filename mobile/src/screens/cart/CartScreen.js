@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Alert, StyleSheet } from 'react-native';
 import client, { errorMessage } from '../../api/client';
+import { payForOrder } from '../../api/payments';
 import { useCart } from '../../context/CartContext';
 import Button from '../../components/Button';
 import Input from '../../components/Input';
@@ -10,6 +11,7 @@ import colors from '../../theme/colors';
 export default function CartScreen({ navigation }) {
   const { items, restaurant, total, changeQty, clear } = useCart();
   const [address, setAddress] = useState('');
+  const [method, setMethod] = useState('cash'); // 'cash' | 'online'
   const [placing, setPlacing] = useState(false);
 
   const placeOrder = async () => {
@@ -17,22 +19,42 @@ export default function CartScreen({ navigation }) {
       return Alert.alert('Address needed', 'Please enter your delivery address.');
     }
     setPlacing(true);
+
+    let order;
     try {
-      await client.post('/orders', {
+      const { data } = await client.post('/orders', {
         restaurantId: restaurant.id,
         items: items.map((i) => ({ menuItemId: i.menuItemId, quantity: i.quantity })),
         deliveryAddress: address.trim(),
-        paymentMethod: 'cash',
+        paymentMethod: method,
       });
-      clear();
-      setAddress('');
-      Alert.alert('Order placed!', 'The restaurant has received your order.');
-      navigation.navigate('Orders');
+      order = data;
     } catch (err) {
-      Alert.alert('Order failed', errorMessage(err));
-    } finally {
       setPlacing(false);
+      return Alert.alert('Order failed', errorMessage(err));
     }
+
+    clear();
+    setAddress('');
+
+    if (method === 'online') {
+      try {
+        const paid = await payForOrder(order.id);
+        Alert.alert(
+          paid ? 'Payment received!' : 'Payment not completed',
+          paid
+            ? 'The restaurant has received your order.'
+            : 'Your order is saved. Open the Orders tab and tap "Pay now" to finish paying.'
+        );
+      } catch (err) {
+        Alert.alert('Could not start payment', `${errorMessage(err)}\n\nYou can pay from the Orders tab.`);
+      }
+    } else {
+      Alert.alert('Order placed!', 'The restaurant has received your order.');
+    }
+
+    setPlacing(false);
+    navigation.navigate('Orders');
   };
 
   if (!items.length) {
@@ -79,9 +101,28 @@ export default function CartScreen({ navigation }) {
         autoCapitalize="sentences"
         multiline
       />
-      <Text style={styles.note}>Payment: cash on delivery</Text>
 
-      <Button title="Place order" onPress={placeOrder} loading={placing} />
+      <Text style={styles.label}>Payment method</Text>
+      <View style={styles.methods}>
+        {[
+          { key: 'cash', label: 'Cash on delivery' },
+          { key: 'online', label: 'Pay online (Chapa)' },
+        ].map((m) => (
+          <TouchableOpacity
+            key={m.key}
+            style={[styles.method, method === m.key && styles.methodActive]}
+            onPress={() => setMethod(m.key)}
+          >
+            <Text style={[styles.methodText, method === m.key && { color: '#fff' }]}>{m.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <Button
+        title={method === 'online' ? 'Place order and pay' : 'Place order'}
+        onPress={placeOrder}
+        loading={placing}
+      />
       <Button title="Clear cart" variant="outline" style={{ marginTop: 10 }} onPress={clear} />
     </ScrollView>
   );
@@ -121,5 +162,16 @@ const styles = StyleSheet.create({
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginVertical: 16 },
   totalLabel: { fontSize: 18, fontWeight: '700' },
   totalValue: { fontSize: 18, fontWeight: '800', color: colors.primary },
-  note: { color: colors.muted, marginBottom: 14 },
+  label: { fontSize: 14, color: colors.muted, marginBottom: 6 },
+  methods: { flexDirection: 'row', gap: 10, marginBottom: 18 },
+  method: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    alignItems: 'center',
+  },
+  methodActive: { backgroundColor: colors.primary },
+  methodText: { color: colors.primary, fontWeight: '600' },
 });
